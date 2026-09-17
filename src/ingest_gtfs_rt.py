@@ -17,7 +17,7 @@ DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NA
 RT_URL = "https://itranvias.com/queryitr_v3.php"
 
 def fetch_and_process_rt():
-    print(f"Conectando al endpoint de iTranvias: {RT_URL}")
+    print(f"[{time.strftime('%H:%M:%S')}] Conectando al endpoint de iTranvias...")
     
     params = {
         "dato": "100",
@@ -35,10 +35,20 @@ def fetch_and_process_rt():
         
         if response.status_code == 200:
             data = response.json()
-            print("Conexion exitosa con la API de iTranvias.")
             
-            # La respuesta viene estructurada por sentidos y paradas
+            # Validamos que la API haya respondido correctamente
+            if data.get("resultado") != "OK":
+                print("[WARN] La API no devolvió un estado OK.")
+                return
+
             sentidos = data.get("paradas", [])
+            
+            # ---> CLÁUSULA DE GUARDA: Si no hay sentidos/paradas, salimos limpiamente <---
+            if not sentidos:
+                print("[INFO] Servidor consultado: No hay elementos activos en este momento (horario nocturno).")
+                return
+
+            print("Conexion exitosa con la API de iTranvias.")
             
             records = []
             # Recorremos cada sentido (ida/vuelta)
@@ -70,15 +80,9 @@ def fetch_and_process_rt():
                 # Guardamos en una tabla especifica para el estado de lineas en tiempo real
                 df.to_sql('line_status_rt', engine, if_exists='replace', index=False)
                 print("Tabla 'line_status_rt' actualizada con exito en PostgreSQL.")
-
-                # ---> FRAGMENTO USADO PARA VALIDAR LA DATA DE LA API - TEMPORAL <---
-                print("\n--- Visualizacion de los datos guardados en PostgreSQL ---")
-                query_df = pd.read_sql("SELECT * FROM line_status_rt;", engine)
-                print(query_df.to_markdown(index=False))
-
             else:
-                print("La API respondio, pero no se encontraron buses activos en la estructura de paradas.")
-                print(f"Respuesta completa del servidor: {data}")
+                print("Se encontraron estructuras de paradas, pero sin buses asignados actualmente.")
+
         else:
             print(f"Error HTTP {response.status_code}: {response.text}")
 
