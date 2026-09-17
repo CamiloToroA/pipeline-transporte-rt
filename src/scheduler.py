@@ -1,52 +1,51 @@
 import time
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from ingest_gtfs_rt import fetch_and_process_rt
 
-# Intervalo de tiempo: cada 1 minuto = 60 segundos
 INTERVALO_SEGUNDOS = 60 
-
-# Definimos la ventana operativa en hora peninsular de España
-HORA_INICIO = 6   # Comienza a las 06:00 AM
-HORA_FIN = 23     # Se detiene a las 23:00 (11:00 PM)
+HORA_INICIO = 6   # 06:00 AM
+HORA_FIN = 23     # 23:00 PM
 
 ZONA_ESPAÑA = ZoneInfo("Europe/Madrid")
 
 if __name__ == "__main__":
     print("=== INICIANDO ORQUESTADOR AUTOMATIZADO (VENTANA HORARIA ESPAÑA) ===")
     print(f"Horario de operación: de {HORA_INICIO}:00 a {HORA_FIN}:00 hrs.")
-    print(f"Frecuencia de consulta: Cada {INTERVALO_SEGUNDOS} segundos.")
-    print("Presiona [Ctrl + C] en cualquier momento para un apagado de emergencia.\n")
+    print("Presionar [Ctrl + C] en cualquier momento para un apagado de emergencia.\n")
     
     try:
         while True:
             ahora_españa = datetime.now(ZONA_ESPAÑA)
             hora_actual = ahora_españa.hour
             
-            # Si aún no es la hora de inicio, esperamos al siguiente ciclo
-            if hora_actual < HORA_INICIO:
-                print(f"[{ahora_españa}] -> Fuera de horario operativo (Aún no son las {HORA_INICIO}:00 AM). En pausa...")
-                time.sleep(INTERVALO_SEGUNDOS)
+            # Si estamos fuera de horario operativo (madrugada o noche pasada las 23:00)
+            if hora_actual < HORA_INICIO or hora_actual >= HORA_FIN:
+                # Calculamos el próximo inicio (las 6:00 AM)
+                siguiente_inicio = ahora_españa.replace(hour=HORA_INICIO, minute=0, second=0, microsecond=0)
+                
+                # Si ya pasaron las 23:00, el inicio programado es para mañana
+                if hora_actual >= HORA_FIN:
+                    siguiente_inicio += timedelta(days=1)
+                
+                segundos_a_dormir = (siguiente_inicio - ahora_españa).total_seconds()
+                horas_a_dormir = segundos_a_dormir / 3600
+                
+                print(f"[{ahora_españa.strftime('%Y-%m-%d %H:%M:%S')}] -> Fuera de horario operativo.")
+                print(f"[*] Entrando en modo reposo nocturno. Despertará a las {HORA_INICIO}:00 AM (en ~{horas_a_dormir:.2f} horas)...\n")
+                
+                time.sleep(segundos_a_dormir)
                 continue
 
-            # Si ya pasamos la hora de fin, el servicio finaliza por hoy
-            if hora_actual >= HORA_FIN:
-                print(f"[{ahora_españa}] -> Hora límite nocturna alcanzada ({HORA_FIN}:00 hrs). El servicio finaliza por hoy.")
-                break
-
-            # Ejecutamos dentro de la ventana diurna
-            print(f"[{ahora_españa}] -> Ejecutando ciclo programado...")
-            
+            # Si estamos dentro de la ventana diurna, ejecutamos normalmente
+            print(f"[{ahora_españa.strftime('%Y-%m-%d %H:%M:%S')}] -> Ejecutando ciclo programado...")
             fetch_and_process_rt()
             
-            print(f"[{ahora_españa}] -> Ciclo finalizado.")
             print(f"Esperando {INTERVALO_SEGUNDOS} segundos para la siguiente ejecución...\n")
-            
             time.sleep(INTERVALO_SEGUNDOS)
             
     except KeyboardInterrupt:
         print("\n\n[!]: ¡Señal de interrupción recibida (Ctrl + C)!")
         print("[!]: Deteniendo el orquestador de forma segura...")
-        print("[*]: Recursos liberados. ¡Apagado completado con éxito!")
         sys.exit(0)
