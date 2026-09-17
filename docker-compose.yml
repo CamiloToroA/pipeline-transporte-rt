@@ -14,5 +14,18 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  pipeline:
+    build: .
+    container_name: gtfs_pipeline_scheduler
+    depends_on:
+      - postgres
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=admin
+      - DB_PASSWORD=adminpassword
+      - DB_NAME=transporte_db
+    restart: always
+
 volumes:
   postgres_data:

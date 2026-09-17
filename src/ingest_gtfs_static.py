@@ -41,6 +41,12 @@ def process_static_gtfs():
         else:
             print(f"️ No se encontró el archivo {filename}")
 
+    # Bloque para mostrar la tabla de verificación en consola
+    print("\n Verificando datos cargados en la base de datos...")
+    df_routes = pd.read_sql("SELECT route_id, route_short_name, route_long_name FROM routes LIMIT 5;", engine)
+    print("\n--- Primeras Rutas ---")
+    print(df_routes.to_markdown(index=False))
+
     print(" ¡Proceso de ingesta estática finalizado!")
 
 if __name__ == "__main__":
