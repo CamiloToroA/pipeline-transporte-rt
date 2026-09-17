@@ -36,14 +36,12 @@ def fetch_and_process_rt():
         if response.status_code == 200:
             data = response.json()
             
-            # Validamos que la API haya respondido correctamente
             if data.get("resultado") != "OK":
                 print("[WARN] La API no devolvió un estado OK.")
                 return
 
             sentidos = data.get("paradas", [])
             
-            # ---> CLÁUSULA DE GUARDA: Si no hay sentidos/paradas, salimos limpiamente <---
             if not sentidos:
                 print("[INFO] Servidor consultado: No hay elementos activos en este momento (horario nocturno).")
                 return
@@ -51,25 +49,25 @@ def fetch_and_process_rt():
             print("Conexion exitosa con la API de iTranvias.")
             
             records = []
-            # Recorremos cada sentido (ida/vuelta)
+            timestamp_extraccion = pd.Timestamp.now()
+
             for sentido_item in sentidos:
                 sentido_id = sentido_item.get("sentido")
                 lista_paradas = sentido_item.get("paradas", [])
                 
-                # Recorremos cada parada dentro del sentido
                 for parada_item in lista_paradas:
                     parada_id = parada_item.get("parada")
                     buses = parada_item.get("buses", [])
                     
-                    # Recorremos cada bus asignado a la parada actual
                     for bus_item in buses:
                         records.append({
-                            "sentido": sentido_id,
-                            "parada_id": parada_id,
-                            "bus_id": bus_item.get("bus"),
-                            "estado": bus_item.get("estado"),
-                            "distancia": bus_item.get("distancia"),
-                            "fecha_peticion": data.get("fecha_peticion")
+                            "sentido": str(sentido_id),
+                            "parada_id": str(parada_id),
+                            "bus_id": str(bus_item.get("bus")),
+                            "estado": str(bus_item.get("estado")),
+                            "distancia": pd.to_numeric(bus_item.get("distancia"), errors='coerce'),
+                            "fecha_peticion": data.get("fecha_peticion"),
+                            "created_at": timestamp_extraccion # Marca de tiempo exacta de inserción
                         })
             
             if records:
@@ -77,9 +75,10 @@ def fetch_and_process_rt():
                 print(f"Se obtuvieron {len(df)} registros de buses en paradas.")
                 
                 engine = create_engine(DATABASE_URL)
-                # Guardamos en una tabla especifica para el estado de lineas en tiempo real
-                df.to_sql('line_status_rt', engine, if_exists='replace', index=False)
-                print("Tabla 'line_status_rt' actualizada con exito en PostgreSQL.")
+                
+                # Usamos 'append' para conservar el histórico en lugar de borrar la tabla
+                df.to_sql('line_status_rt', engine, if_exists='append', index=False)
+                print("Tabla 'line_status_rt' actualizada (append) con exito en PostgreSQL.")
             else:
                 print("Se encontraron estructuras de paradas, pero sin buses asignados actualmente.")
 
