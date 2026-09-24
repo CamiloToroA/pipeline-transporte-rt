@@ -12,6 +12,8 @@ Pipeline de Ingeniería de Datos para la ingesta, procesamiento y almacenamiento
 - [x] Configuración del entorno de desarrollo y Docker.
 - [x] Despliegue de base de datos PostgreSQL local.
 - [x] Script de ingesta base y validación de conexión DB.
-- [ ] Integración con API de transporte en tiempo real.
-- [ ] Transformaciones de datos y orquestación.
-
+- [x] Integración con API de transporte en tiempo real.
+- [x] Transformaciones de datos y orquestación.
+- [x] Desarrollar Base de Datos.
+- [x] Desarrollar capa Analítica .
+- [ ] Desarrollo Tablero Power BI.
