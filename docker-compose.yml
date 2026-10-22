@@ -13,12 +13,18 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d transporte_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   pipeline:
     build: .
     container_name: gtfs_pipeline_scheduler
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       - PYTHONUNBUFFERED=1
       - DB_HOST=postgres
