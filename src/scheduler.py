@@ -16,6 +16,9 @@ ESPACIADO_SEGUNDOS = (HORA_FIN - HORA_INICIO) * 3600 / (CUOTA_DIARIA * 0.95)
 PAUSA_429_INICIAL = 5 * 60
 PAUSA_429_MAXIMA = 60 * 60
 
+# time.sleep no avanza mientras el PC está suspendido: dormimos en tramos y revisamos el reloj real
+TRAMO_REPOSO_SEGUNDOS = 5 * 60
+
 
 def segundos_hasta_inicio(ahora_españa):
     siguiente_inicio = ahora_españa.replace(hour=HORA_INICIO, minute=0, second=0, microsecond=0)
@@ -23,6 +26,14 @@ def segundos_hasta_inicio(ahora_españa):
         siguiente_inicio += timedelta(days=1)
     # Restamos en UTC: con la misma tzinfo Python ignora el cambio de hora (DST)
     return (siguiente_inicio.astimezone(timezone.utc) - ahora_españa.astimezone(timezone.utc)).total_seconds()
+
+
+def dormir_hasta_inicio():
+    while True:
+        ahora_españa = datetime.now(ZONA_ESPAÑA)
+        if HORA_INICIO <= ahora_españa.hour < HORA_FIN:
+            return
+        time.sleep(min(TRAMO_REPOSO_SEGUNDOS, segundos_hasta_inicio(ahora_españa)))
 
 
 if __name__ == "__main__":
@@ -49,7 +60,7 @@ if __name__ == "__main__":
                 segundos_a_dormir = segundos_hasta_inicio(ahora_españa)
                 print(f"[{ahora_españa.strftime('%Y-%m-%d %H:%M:%S')}] -> Fuera de horario operativo.")
                 print(f"[*] Entrando en modo reposo nocturno. Despertará a las {HORA_INICIO}:00 (en ~{segundos_a_dormir / 3600:.2f} horas)...\n")
-                time.sleep(segundos_a_dormir)
+                dormir_hasta_inicio()
                 continue
 
             print(f"[{ahora_españa.strftime('%Y-%m-%d %H:%M:%S')}] -> Ejecutando ciclo programado...")
