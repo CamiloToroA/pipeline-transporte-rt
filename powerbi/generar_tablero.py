@@ -216,10 +216,15 @@ MEASURES = [
     ("Ciclos", "Ciclos con Error", "#,0", "Continuidad",
      "Consultas fallidas (red, HTTP, formato o respuesta de la API).",
      "CALCULATE(COUNTROWS(Ciclos), Ciclos[Resultado] = \"Error\")"),
+    # El scheduler reparte el 95 % de la cuota diaria de iTranvías (1999) entre la ventana y las
+    # líneas (src/scheduler.py): 1900 consultas al día (la primera sale a las 06:00 en punto), no una por
+    # minuto y línea.
     ("Ciclos", "Ciclos Esperados", "#,0", "Continuidad",
-     "Una consulta por minuto y línea monitoreada dentro de la ventana de captura (06:00-24:00), "
-     "entre el primer y el último día con registros.",
+     "Consultas que el scheduler reparte al día (95 % de la cuota de 1999), en proporción a las horas "
+     "de la ventana (06:00-24:00) y a las líneas monitoreadas seleccionadas, entre el primer y el último "
+     "día con registros.",
      """
+     VAR ConsultasPorDia = ROUNDUP(1999 * 0.95, 0)
      VAR Inicio = CALCULATE(MIN(Ciclos[fecha]), REMOVEFILTERS())
      VAR Fin = CALCULATE(MAX(Ciclos[fecha]), REMOVEFILTERS())
      VAR Dias =
@@ -227,12 +232,17 @@ MEASURES = [
              FILTER(VALUES(Calendario[Fecha]), Calendario[Fecha] >= Inicio && Calendario[Fecha] <= Fin)
          )
      VAR HorasVentana = CALCULATE(COUNTROWS(Horas), Horas[en_ventana_captura] = TRUE())
+     VAR HorasVentanaTotal = CALCULATE(COUNTROWS(Horas), Horas[en_ventana_captura] = TRUE(), REMOVEFILTERS(Horas))
      VAR LineasMonitoreadas = CALCULATE(COUNTROWS(Lineas), Lineas[Monitoreada] = TRUE())
+     VAR LineasMonitoreadasTotal = CALCULATE(COUNTROWS(Lineas), Lineas[Monitoreada] = TRUE(), REMOVEFILTERS(Lineas))
      RETURN
-         Dias * HorasVentana * 60 * LineasMonitoreadas"""),
+         Dias * ConsultasPorDia
+             * DIVIDE(HorasVentana, HorasVentanaTotal)
+             * DIVIDE(LineasMonitoreadas, LineasMonitoreadasTotal)"""),
     ("Ciclos", "Cobertura de Captura", "0.0%", "Calidad",
-     "Ciclos registrados frente a los esperados. Los días de inicio y el día en curso salen incompletos.",
-     "DIVIDE([Ciclos Registrados], [Ciclos Esperados])"),
+     "Ciclos registrados dentro de la ventana frente a los esperados. El 22-oct supera el 100 % porque "
+     "aún se consultaba cada línea cada minuto.",
+     "DIVIDE(CALCULATE([Ciclos Registrados], Horas[en_ventana_captura] = TRUE()), [Ciclos Esperados])"),
     ("Ciclos", "Disponibilidad API", "0.0%", "Calidad",
      "Porcentaje de consultas que no terminaron en error.",
      "DIVIDE([Ciclos Registrados] - [Ciclos con Error], [Ciclos Registrados])"),
