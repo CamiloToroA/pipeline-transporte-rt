@@ -191,7 +191,15 @@ WITH limites AS (
             (SELECT MIN((fecha_peticion AT TIME ZONE 'Europe/Madrid')::DATE) FROM bus_parada_rt),
             (NOW() AT TIME ZONE 'Europe/Madrid')::DATE
         ) AS desde,
-        (NOW() AT TIME ZONE 'Europe/Madrid')::DATE AS hasta
+        -- Termina en el último día con datos (hoy solo si aún no hay datos): terminada la captura,
+        -- los filtros de fecha no se extienden a días vacíos.
+        COALESCE(
+            GREATEST(
+                (SELECT MAX((inicio AT TIME ZONE 'Europe/Madrid')::DATE) FROM ciclos_rt),
+                (SELECT MAX((fecha_peticion AT TIME ZONE 'Europe/Madrid')::DATE) FROM bus_parada_rt)
+            ),
+            (NOW() AT TIME ZONE 'Europe/Madrid')::DATE
+        ) AS hasta
 )
 SELECT
     d::DATE AS fecha,

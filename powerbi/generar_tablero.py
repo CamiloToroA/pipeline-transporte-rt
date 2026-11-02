@@ -148,38 +148,56 @@ MEASURES = [
     ("Observaciones", "Capturas con Datos", "#,0", "Actividad",
      "Consultas a la API que devolvieron al menos un bus.",
      "DISTINCTCOUNT(Observaciones[ciclo_id])"),
+    # Cada captura consulta una sola línea y en un minuto caben 1-2 líneas (5 el 22-oct, con el ritmo
+    # anterior): la flota se calcula por línea y se suma, para que no dependa del ritmo de consulta.
     ("Observaciones", "Flota Promedio en Servicio", "#,0.0", "Flota",
-     "Promedio de buses distintos por minuto, en los minutos con actividad.",
+     "Suma, por línea, del promedio de buses distintos por captura con datos.",
      """
-     AVERAGEX(
-         VALUES(Observaciones[Minuto]),
-         CALCULATE(DISTINCTCOUNT(Observaciones[Bus]))
+     SUMX(
+         VALUES(Lineas[linea_id]),
+         CALCULATE(
+             AVERAGEX(
+                 VALUES(Observaciones[ciclo_id]),
+                 CALCULATE(DISTINCTCOUNT(Observaciones[Bus]))
+             )
+         )
      )"""),
     ("Observaciones", "Flota Máxima", "#,0", "Flota",
-     "Máximo de buses distintos observados en un mismo minuto.",
+     "Mayor número de buses en una misma hora, sumando por línea su captura con más buses.",
      """
      MAXX(
-         VALUES(Observaciones[Minuto]),
-         CALCULATE(DISTINCTCOUNT(Observaciones[Bus]))
+         CROSSJOIN(VALUES(Calendario[Fecha]), VALUES(Horas[hora])),
+         SUMX(
+             VALUES(Lineas[linea_id]),
+             CALCULATE(
+                 MAXX(
+                     VALUES(Observaciones[ciclo_id]),
+                     CALCULATE(DISTINCTCOUNT(Observaciones[Bus]))
+                 )
+             )
+         )
      )"""),
-    ("Observaciones", "Última Captura", "dd/mm/yyyy hh:nn:ss", "Última captura",
+    ("Observaciones", "Última Captura", "dd/mm/yyyy hh:nn", "Última captura",
      "Fecha y hora (A Coruña) de la captura con datos más reciente del periodo.",
      """
      CALCULATE(
          MAX(Observaciones[Fecha y hora]),
          REMOVEFILTERS(Observaciones),
-         REMOVEFILTERS(Paradas)
+         REMOVEFILTERS(Paradas),
+         VALUES(Lineas[linea_id])
      )"""),
     ("Observaciones", "Buses Última Captura", "#,0", "Última captura",
      "Buses en servicio según la última captura con datos de cada línea.",
      """
      SUMX(
          VALUES(Lineas[linea_id]),
+         VAR Linea = Lineas[linea_id]
          VAR UltimoCiclo =
              CALCULATE(
                  MAX(Observaciones[ciclo_id]),
                  REMOVEFILTERS(Observaciones),
-                 REMOVEFILTERS(Paradas)
+                 REMOVEFILTERS(Paradas),
+                 Lineas[linea_id] = Linea
              )
          RETURN
              IF(
@@ -192,11 +210,13 @@ MEASURES = [
      """
      SUMX(
          VALUES(Lineas[linea_id]),
+         VAR Linea = Lineas[linea_id]
          VAR UltimoCiclo =
              CALCULATE(
                  MAX(Observaciones[ciclo_id]),
                  REMOVEFILTERS(Observaciones),
-                 REMOVEFILTERS(Paradas)
+                 REMOVEFILTERS(Paradas),
+                 Lineas[linea_id] = Linea
              )
          RETURN
              IF(
@@ -480,12 +500,12 @@ class Page:
         self.visuals.append(v)
 
     # --- visuales de alto nivel
-    def card(self, x, y, w, h, title, measure):
+    def card(self, x, y, w, h, title, measure, font_size=30):
         field, _, _ = F(measure)
         self.add("cardVisual", x, y, w, h, title,
                  query={"queryState": {"Data": projections([measure])}},
                  objects={"label": [{"properties": {"show": lit("false")}, "selector": {"id": "default"}}],
-                          "value": [{"properties": {"fontSize": lit("30D"), "horizontalAlignment": lit("'center'")},
+                          "value": [{"properties": {"fontSize": lit(f"{font_size}D"), "horizontalAlignment": lit("'center'")},
                                      "selector": {"id": "default"}}]})
 
     def slicer(self, x, y, w, h, title, ref, mode="Basic", filters=None, horizontal=False):
@@ -565,8 +585,8 @@ def slicers_comunes(p, extra=None):
 def cards(p, y, items):
     n, gap, x0, total = len(items), 24, 48, 1824
     w = (total - gap * (n - 1)) / n
-    for i, (title, m) in enumerate(items):
-        p.card(x0 + i * (w + gap), y, w, 150, title, m)
+    for i, (title, m, *font_size) in enumerate(items):
+        p.card(x0 + i * (w + gap), y, w, 150, title, m, *font_size)
 
 
 def build_report():
@@ -574,15 +594,15 @@ def build_report():
 
     p = Page("Resumen Operativo", "RESUMEN OPERATIVO · BUSES DE A CORUÑA")
     slicers_comunes(p)
-    cards(p, 282, [("Última captura con datos", "Última Captura"), ("Buses en la última captura", "Buses Última Captura"),
-                   ("Flota promedio en servicio", "Flota Promedio en Servicio"), ("Flota máxima en un minuto", "Flota Máxima"),
+    cards(p, 282, [("Última captura con datos", "Última Captura", 22), ("Buses en la última captura", "Buses Última Captura"),
+                   ("Flota promedio en servicio", "Flota Promedio en Servicio"), ("Flota máxima en una hora", "Flota Máxima"),
                    ("Observaciones", "Total Observaciones")])
     p.chart("clusteredBarChart", 48, 456, 600, 584, "Buses en la última captura por línea",
             "Lineas.Línea", ["Buses Última Captura"])
-    p.chart("lineChart", 672, 456, 1200, 290, "Flota promedio en servicio por hora (hora de A Coruña)",
+    p.chart("lineChart", 672, 456, 1200, 250, "Flota promedio en servicio por hora (hora de A Coruña)",
             "Horas.Hora del día", ["Flota Promedio en Servicio"], series="Lineas.Línea",
             sort=("Horas.Hora del día", "Ascending"))
-    p.table(672, 770, 1200, 270, "Resumen por línea",
+    p.table(672, 730, 1200, 310, "Resumen por línea",
             ["Lineas.Línea", "Lineas.Tipología", "Total Observaciones", "Buses Únicos",
              "Flota Promedio en Servicio", "Flota Máxima", "Cobertura de Captura"])
     pages.append(p)
